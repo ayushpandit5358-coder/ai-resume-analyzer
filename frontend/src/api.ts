@@ -1,4 +1,5 @@
 import type { AnalysisResponse, SamplesResponse } from './types';
+import { clientAnalyze, CLIENT_SAMPLES } from './clientEngine';
 
 const API_BASE = 'http://localhost:8080/api';
 
@@ -6,39 +7,57 @@ export async function uploadResumeFile(file: File): Promise<{ filename: string; 
   const formData = new FormData();
   formData.append('file', file);
 
-  const res = await fetch(`${API_BASE}/resumes/upload`, {
-    method: 'POST',
-    body: formData,
-  });
+  try {
+    const res = await fetch(`${API_BASE}/resumes/upload`, {
+      method: 'POST',
+      body: formData,
+    });
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ error: 'Upload failed' }));
-    throw new Error(errorData.error || 'Failed to upload document');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend server unreachable, parsing document on client:', err);
   }
 
-  return res.json();
+  // Client-side fallback text extractor for TXT / plain text
+  const text = await file.text();
+  return {
+    filename: file.name,
+    extractedText: text || `[Uploaded file: ${file.name}] - Document uploaded successfully. Paste text if content requires specialized OCR.`
+  };
 }
 
 export async function analyzeResume(resumeText: string, jobDescription: string): Promise<AnalysisResponse> {
-  const res = await fetch(`${API_BASE}/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ resumeText, jobDescription }),
-  });
+  try {
+    const res = await fetch(`${API_BASE}/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ resumeText, jobDescription }),
+    });
 
-  if (!res.ok) {
-    throw new Error('Failed to compute resume analysis');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend server unreachable, executing client-side analysis engine:', err);
   }
 
-  return res.json();
+  // Seamless client-side engine fallback for static GitHub Pages hosting
+  return clientAnalyze(resumeText, jobDescription);
 }
 
 export async function fetchSamples(): Promise<SamplesResponse> {
-  const res = await fetch(`${API_BASE}/samples`);
-  if (!res.ok) {
-    throw new Error('Failed to load sample templates');
+  try {
+    const res = await fetch(`${API_BASE}/samples`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend server unreachable, loading client sample templates:', err);
   }
-  return res.json();
+
+  return CLIENT_SAMPLES;
 }
