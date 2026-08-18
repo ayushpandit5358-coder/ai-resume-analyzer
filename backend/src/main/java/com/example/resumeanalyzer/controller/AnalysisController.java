@@ -43,10 +43,23 @@ public class AnalysisController {
     @PostMapping("/resumes/upload")
     public ResponseEntity<Map<String, Object>> uploadResume(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Uploaded file is empty"));
+            return ResponseEntity.badRequest().body(Map.of("error", "Uploaded file is empty. Please select a valid document."));
         }
+        if (file.getSize() > 10 * 1024 * 1024) {
+            return ResponseEntity.badRequest().body(Map.of("error", "File size exceeds the 10 MB limit. Please upload a smaller PDF or DOCX file."));
+        }
+
+        String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
+        if (!filename.endsWith(".pdf") && !filename.endsWith(".docx") && !filename.endsWith(".doc") && !filename.endsWith(".txt")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid file format. Please upload a valid PDF or DOCX resume document."));
+        }
+
         try {
             String rawText = documentParserService.extractText(file);
+            if (rawText == null || rawText.trim().length() < 15) {
+                return ResponseEntity.badRequest().body(Map.of("error", "We couldn't extract enough text information from this document. If this is a scanned PDF, text OCR processing may be required."));
+            }
+
             Map<String, String> sections = documentParserService.extractSections(rawText);
 
             Map<String, Object> response = new HashMap<>();
@@ -55,7 +68,7 @@ public class AnalysisController {
             response.put("sections", sections);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Error parsing file: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Error processing resume document: " + e.getMessage()));
         }
     }
 
